@@ -1,0 +1,72 @@
+---
+title: "Assignment 1"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2025-06-01"
+---
+```{r }
+library(readxl)
+bma07_e1_23a_v7 <- read_excel("D:/College/Business Analytics/bma07.e1.23a-v7.xlsx")
+View(bma07_e1_23a_v7)
+```
+
+##Code was taken from class Fall 2024 INTRODUCTION TO FINANCIAL ACCOUNTING (ACCT-23020-006) 2024 & the data seems to have been extracted by Wendy Tietz initially. 
+
+
+
+##To create a set of quantitative data, we would concatenate variables such as total, day of sale, year of sales, underwriter in order to produce mean, median, mode, min, max including the quadrants
+
+```{r quantitative data}
+summary(bma07_e1_23a_v7[, c("Total", "Day of sale", "Year of sale", "Underwriter")])
+```
+
+##For the following 3 codes, we will simply create a table for varibles such as types of insurance, sales/total by sales people along with the different states the total may originate from
+
+
+```{r categorical variable_1}
+table(bma07_e1_23a_v7$`Insurance type`)
+```
+
+```{r categorical variable_2}
+table(bma07_e1_23a_v7$Salesperson)
+```
+
+```{r categorical variable_3}
+table(bma07_e1_23a_v7$`State or Province`)
+```
+
+
+##One method to create a new variable is to simply take log of an existing one. Conversely we can display the new variable by using summary since the data is easier to read via that method, for comparison, summary of total has been included directly below it 
+
+```{r transforming variable by taking log}
+bma07_e1_23a_v7$logtotal <- log(bma07_e1_23a_v7$Total)
+```
+
+```{r summay of new variable}
+summary(bma07_e1_23a_v7$logtotal)
+```
+
+```{r summay of total}
+summary(bma07_e1_23a_v7$Total)
+```
+
+##To create a histogram we only require one variable in which case we'll use Total
+
+
+```{r quantitative variable plot}
+hist(bma07_e1_23a_v7$Total, main = "Total", xlab = "Total($)")
+```
+
+
+##Since the data chosen is extremely dense, we'll create a new category for totals that are above 1250 for our scatterplot to make it easier to read. 
+
+```{r new category for totals above 1250}
+high_total <- bma07_e1_23a_v7[bma07_e1_23a_v7$Total > 1250, ]
+
+```
+
+```{r plotting a scatter plot}
+plot(high_total$`Day of sale`, high_total$Total, main = "Scatterplot of Day of Sale vs Total (>$1250)", xlab = "Day of Sale", ylab = "Total ($)")
+```

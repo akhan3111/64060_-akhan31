@@ -1,0 +1,136 @@
+---
+title: "Assignment_2"
+output:
+  word_document: default
+  html_document: default
+date: "2025-06-09"
+---
+
+
+```{r everything}
+# Step 1: Load libraries
+if (!require("dplyr")) install.packages("dplyr", dependencies = TRUE)
+if (!require("caret")) install.packages("caret", dependencies = TRUE)
+if (!require("class")) install.packages("class", dependencies = TRUE)
+if (!require("readr")) install.packages("readr", dependencies = TRUE)
+library(dplyr)
+library(caret)
+library(class)
+library(readr)
+
+# Step 2: Load and clean data
+# Load raw data and remove ID and ZIP Code since they are not predictive features
+bank_raw <- read_csv("C:/Users/arkha/Downloads/UniversalBank.csv")
+bank_cleaned <- bank_raw %>% select(-ID, -`ZIP Code`)
+
+# Step 3: Dummy encoding
+# Convert the 'Education' categorical variable with 3 levels into dummy variables
+bank_cleaned <- cbind(bank_cleaned, model.matrix(~ factor(Education) - 1, bank_cleaned))
+bank_cleaned <- bank_cleaned %>% select(-Education)
+
+# Step 4: Normalize numeric columns
+# Min-max scale numerical variables to bring them into the range [0,1], helping distance-based models like k-NN
+minmax_scale <- function(x) (x - min(x)) / (max(x) - min(x))
+bank_scaled <- bank_cleaned %>% mutate(
+  Age = minmax_scale(Age),
+  Experience = minmax_scale(Experience),
+  Income = minmax_scale(Income),
+  CCAvg = minmax_scale(CCAvg),
+  Mortgage = minmax_scale(Mortgage)
+)
+
+# Step 5: Partition (60% train, 40% validation split)
+# Split the data into training and validation sets, maintaining class proportions
+set.seed(42)
+split_index <- createDataPartition(bank_scaled$`Personal Loan`, p = 0.6, list = FALSE)
+training_data <- bank_scaled[split_index, ]
+validation_data <- bank_scaled[-split_index, ]
+X_train_set <- training_data %>% select(-`Personal Loan`)
+Y_train_set <- training_data$`Personal Loan`
+X_valid_set <- validation_data %>% select(-`Personal Loan`)
+Y_valid_set <- validation_data$`Personal Loan`
+
+# Step 6: Normalize new customer
+# Normalize new applicant's data using training data's min/max to ensure consistent scale
+applicant_info <- data.frame(
+  Age = 40, Experience = 10, Income = 84, Family = 2,
+  CCAvg = 2, Mortgage = 0, `Securities Account` = 0,
+  `CD Account` = 0, Online = 1, CreditCard = 1,
+  `factor(Education)1` = 0, `factor(Education)2` = 1, `factor(Education)3` = 0
+)
+scale_relative <- function(x, ref) (x - min(ref)) / (max(ref) - min(ref))
+applicant_info$Age <- scale_relative(applicant_info$Age, training_data$Age)
+applicant_info$Experience <- scale_relative(applicant_info$Experience, training_data$Experience)
+applicant_info$Income <- scale_relative(applicant_info$Income, training_data$Income)
+applicant_info$CCAvg <- scale_relative(applicant_info$CCAvg, training_data$CCAvg)
+applicant_info$Mortgage <- scale_relative(applicant_info$Mortgage, training_data$Mortgage)
+
+# Step 7: Predict with k = 1
+# Perform k-NN classification for the applicant using k = 1 (most similar neighbor)
+knn_pred_k1 <- knn(train = X_train_set, test = applicant_info, cl = Y_train_set, k = 1)
+cat("Prediction with k = 1:", knn_pred_k1, "\n")
+# Answer to Q1: The applicant is classified as 2 (loan **not** accepted)
+
+# Step 8: Best k using validation
+# Loop through k = 1 to 20 to determine the best-performing value of k on validation data
+k_scores <- data.frame(k = 1:20, accuracy = NA)
+for (k_val in 1:20) {
+  pred_k <- knn(X_train_set, X_valid_set, cl = Y_train_set, k = k_val)
+  k_scores$accuracy[k_val] <- mean(pred_k == Y_valid_set)
+}
+optimal_k_val <- k_scores$k[which.max(k_scores$accuracy)]
+cat("Best k found:", optimal_k_val, "\n")
+# Answer to Q2: The best k balancing overfitting and generalization was found to be 1
+
+# Step 9: Confusion matrix for best k
+# Create a confusion matrix using the optimal k value from the previous step on validation data
+validation_predictions <- knn(X_train_set, X_valid_set, cl = Y_train_set, k = optimal_k_val)
+print(table(Predicted = validation_predictions, Actual = Y_valid_set))
+# Answer to Q3: Confusion matrix (k = 1)
+#             Actual
+# Predicted    0    1
+#         0 1778   71
+#         1   30  121
+
+# Step 10: Predict customer again
+# Classify the same applicant using the optimal k value
+final_applicant_pred <- knn(X_train_set, applicant_info, cl = Y_train_set, k = optimal_k_val)
+cat("Prediction with best k:", final_applicant_pred, "\n")
+# Answer to Q4: The applicant is classified as 2 (loan **not** accepted)
+
+# Step 11: Repartition (50% train, 30% validation, 20% test)
+# Perform a 3-way split for more comprehensive model evaluation: 50% train, 30% validation, 20% test
+set.seed(123)
+reshuffled_data <- bank_scaled[sample(nrow(bank_scaled)), ]
+total_rows <- nrow(reshuffled_data)
+train_part <- reshuffled_data[1:floor(0.5 * total_rows), ]
+valid_part <- reshuffled_data[(floor(0.5 * total_rows) + 1):floor(0.8 * total_rows), ]
+test_part <- reshuffled_data[(floor(0.8 * total_rows) + 1):total_rows, ]
+
+X_part_train <- train_part %>% select(-`Personal Loan`)
+Y_part_train <- train_part$`Personal Loan`
+X_part_valid <- valid_part %>% select(-`Personal Loan`)
+Y_part_valid <- valid_part$`Personal Loan`
+X_part_test <- test_part %>% select(-`Personal Loan`)
+Y_part_test <- test_part$`Personal Loan`
+
+# Step 12: Confusion matrices
+# Evaluate model performance across train, validation, and test splits using best k
+train_predicted <- knn(X_part_train, X_part_train, cl = Y_part_train, k = optimal_k_val)
+valid_predicted <- knn(X_part_train, X_part_valid, cl = Y_part_train, k = optimal_k_val)
+test_predicted <- knn(X_part_train, X_part_test, cl = Y_part_train, k = optimal_k_val)
+
+cat("Training Confusion Matrix:\n")
+print(table(Predicted = train_predicted, Actual = Y_part_train))
+# Training matrix indicates near-perfect fit, suggesting overfitting at k=1
+
+cat("Validation Confusion Matrix:\n")
+print(table(Predicted = valid_predicted, Actual = Y_part_valid))
+# Indicates generalization capability to unseen data (Validation)
+
+cat("Test Confusion Matrix:\n")
+print(table(Predicted = test_predicted, Actual = Y_part_test))
+
+
+
+```

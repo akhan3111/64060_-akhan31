@@ -1,0 +1,68 @@
+---
+title: "Assignment_4"
+output:
+  word_document: default
+  html_document: default
+date: "2025-06-12"
+---
+
+
+```{r }
+# Load necessary libraries
+
+if (!require("cluster")) install.packages("cluster", dependencies = TRUE)
+if (!require("factoextra")) install.packages("factoextra", dependencies = TRUE)
+if (!require("readr")) install.packages("readr", dependencies = TRUE)
+
+library(cluster)     # For clustering algorithms
+library(factoextra)  # For visualizing clustering results
+library(readr)       # For reading the excel file
+
+# Load the dataset
+pharma_data <- read_csv("C:/Users/arkha/Downloads/Pharmaceuticals.csv")
+
+# Select only the numerical attributes (columns 3 to 11)
+financial_data <- pharma_data[, c(3:11)]  # Columns 3 to 11 contain numerical variables
+
+# Standardize the financial data
+standardized_data <- scale(financial_data)
+
+# Inspect the scaled data
+head(standardized_data)
+
+# Use the elbow method to determine the optimal number of clusters
+set.seed(42)  # For reproducibility
+fviz_nbclust(standardized_data, kmeans, method = "wss")
+
+# After inspecting the elbow plot, decide on the number of clusters (for example, 3 clusters)
+# Apply K-means clustering with 3 clusters (based on the elbow method result)
+kmeans_analysis <- kmeans(standardized_data, centers = 3, nstart = 25)
+
+# Add the cluster assignments to the original dataset
+pharma_data$Cluster_Labels <- kmeans_analysis$cluster
+
+# View the cluster centers to understand the characteristics of each cluster
+print("Cluster Centers (Centroid Values):")
+print(kmeans_analysis$centers)
+
+# Investigate patterns in non-numerical attributes (e.g., Recommendation, Headquarters, Exchange)
+print("Cluster Distribution by Recommendation:")
+print(table(pharma_data$Cluster_Labels, pharma_data$Median_Recommendation))
+
+print("Cluster Distribution by Location of Firm:")
+print(table(pharma_data$Cluster_Labels, pharma_data$Location))
+
+print("Cluster Distribution by Stock Exchange:")
+print(table(pharma_data$Cluster_Labels, pharma_data$Exchange))
+
+# Assign meaningful names to the clusters based on the analysis of cluster centers
+pharma_data$Cluster_Name <- factor(pharma_data$Cluster_Labels, 
+                                   levels = c(1, 2, 3), 
+                                   labels = c("Dominant Leaders", "Efficient Innovators", "Moderate Performers"))
+
+# View the dataset with new cluster names
+head(pharma_data)
+
+# Summary of clusters
+summary(pharma_data$Cluster_Name)
+```

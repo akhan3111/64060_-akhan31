@@ -1,0 +1,125 @@
+---
+title: "Assignment_3"
+output:
+  word_document: default
+  html_document: default
+date: "2025-06-15"
+---
+
+```{r }
+
+# Load necessary libraries
+if (!require("readr")) install.packages("readr", dependencies = TRUE)
+if (!require("e1071")) install.packages("e1071", dependencies = TRUE)
+
+library(readr)      
+library(e1071)
+
+# Load the data from CSV file
+bank_data <- read.csv("C:/Users/arkha/Downloads/UniversalBank.csv")
+
+# Just keep the columns we need for this assignment
+# Personal Loan = if they accepted the loan
+# Online = if they use online banking
+# CreditCard = if they have a credit card
+bank_data <- bank_data[, c("Personal.Loan", "Online", "CreditCard")]
+
+# Make the column names easier to type
+colnames(bank_data) <- c("loan", "online", "card")
+
+# We'll split the data into training and validation sets
+set.seed(100)  # this makes sure the random split is the same each time
+sample_rows <- sample(1:nrow(bank_data), 0.6 * nrow(bank_data))
+train_data <- bank_data[sample_rows, ]
+valid_data <- bank_data[-sample_rows, ]
+
+# --------------------
+# A. Create a pivot table with Credit Card (row), Loan (2nd row), Online (column)
+table_result <- table(train_data$card, train_data$loan, train_data$online)
+print("Pivot Table (Card x Loan x Online):")
+print(table_result)
+
+# --------------------
+# B. Calculate the probability someone accepts the loan
+# if they have a credit card AND use online banking
+total_people <- sum(table_result["1", , "1"])
+accepted_loan <- table_result["1", "1", "1"]
+prob_from_pivot <- accepted_loan / total_people
+print(paste("B. P(Loan=1 | Card=1, Online=1) from pivot table:", round(prob_from_pivot, 4)))
+
+# --------------------
+# C. Make two simpler tables to compare
+# Loan vs Online
+table_online <- table(train_data$loan, train_data$online)
+print("Loan vs Online Table:")
+print(table_online)
+
+# Loan vs Credit Card
+table_card <- table(train_data$loan, train_data$card)
+print("Loan vs Credit Card Table:")
+print(table_card)
+
+# --------------------
+# D. Now calculate all the probabilities we need
+
+# Total number of people in training data
+total_rows <- nrow(train_data)
+# How many said yes or no to loan
+loan_yes <- sum(train_data$loan == 1)
+loan_no <- sum(train_data$loan == 0)
+
+# i. P(Card = 1 | Loan = 1)
+prob_card_loan_yes <- table_card["1", "1"] / loan_yes
+
+# ii. P(Online = 1 | Loan = 1)
+prob_online_loan_yes <- table_online["1", "1"] / loan_yes
+
+# iii. P(Loan = 1)
+prob_loan_yes <- loan_yes / total_rows
+
+# iv. P(Card = 1 | Loan = 0)
+prob_card_loan_no <- table_card["0", "1"] / loan_no
+
+# v. P(Online = 1 | Loan = 0)
+prob_online_loan_no <- table_online["0", "1"] / loan_no
+
+# vi. P(Loan = 0)
+prob_loan_no <- loan_no / total_rows
+
+# --------------------
+# E. Use Naive Bayes formula manually
+# We use: P(A|B) = [P(B|A)*P(A)] / [P(B|A)*P(A) + P(B|~A)*P(~A)]
+top <- prob_card_loan_yes * prob_online_loan_yes * prob_loan_yes
+bottom <- top + (prob_card_loan_no * prob_online_loan_no * prob_loan_no)
+naive_result <- top / bottom
+print(paste("E. Naive Bayes manually: P(Loan=1 | Card=1, Online=1) =", round(naive_result, 4)))
+
+# --------------------
+# F. Compare both answers
+print(paste("F. From Pivot Table: ", round(prob_from_pivot, 4)))
+print(paste("F. From Naive Bayes: ", round(naive_result, 4)))
+
+# --------------------
+# G. Run actual Naive Bayes model to double-check
+# We'll use e1071 package 
+
+# Convert to factors for the model to work properly
+train_data$loan <- as.factor(train_data$loan)
+train_data$card <- as.factor(train_data$card)
+train_data$online <- as.factor(train_data$online)
+
+# Train the model using just card and online
+nb_model <- naiveBayes(loan ~ card + online, data = train_data)
+
+# Make a test input for someone with card = 1 and online = 1
+test_person <- data.frame(card = factor(1, levels = c(0,1)),
+                          online = factor(1, levels = c(0,1)))
+prediction <- predict(nb_model, test_person, type = "raw")
+
+# Print the model's predicted probability
+print(paste("G. Naive Bayes model output: P(Loan=1) =", round(prediction[,"1"], 4)))
+
+# Final note
+cat("\nWe used only two smaller tables for the calculations:\n")
+cat("- Loan vs Online\n- Loan vs Credit Card\n")
+```

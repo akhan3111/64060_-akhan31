@@ -1,0 +1,110 @@
+---
+title: "Assignment_5"
+output:
+  word_document: default
+  html_document: default
+date: "2025-06-23"
+---
+
+```{r }
+
+# Load necessary libraries
+if (!require("cluster")) install.packages("cluster", dependencies = TRUE)
+if (!require("dplyr")) install.packages("dplyr", dependencies = TRUE)
+if (!require("readr")) install.packages("readr", dependencies = TRUE)
+
+library(cluster)
+library(dplyr)
+library(readr)
+
+# Load the dataset
+cereal_df <- read_csv("C:/Users/arkha/Downloads/Cereals.csv")
+
+# Answer: All cereals with missing values are removed using na.omit().
+cereal_df_clean <- na.omit(cereal_df)
+
+# Drop non-numeric columns (name, mfr, type)
+cereal_numeric <- cereal_df_clean %>% select(-name, -mfr, -type)
+
+# Normalize the numeric data
+# Answer: Yes, normalization is necessary because the variables (e.g., sodium, fiber, etc.)
+# are on different scales. Without normalization, large-scale features would dominate the distance calculations.
+cereal_scaled <- scale(cereal_numeric)
+
+# Apply AGNES with different linkage methods
+agnes_single <- agnes(cereal_scaled, method = "single")
+agnes_complete <- agnes(cereal_scaled, method = "complete")
+agnes_average <- agnes(cereal_scaled, method = "average")
+agnes_ward <- agnes(cereal_scaled, method = "ward")
+
+# Plot dendrograms for comparison
+par(mfrow = c(2, 2))
+plot(agnes_single, which.plots = 2, main = "Single Linkage")
+plot(agnes_complete, which.plots = 2, main = "Complete Linkage")
+plot(agnes_average, which.plots = 2, main = "Average Linkage")
+plot(agnes_ward, which.plots = 2, main = "Ward Linkage")
+
+# Based on the dendrograms, Ward’s method was chosen as the best clustering approach.It creates well-separated and balanced clusters.
+
+
+# I decided to cut the tree into 4 clusters based on visual observation of Ward's dendrogram.
+cluster_labels <- cutree(agnes_ward, k = 4)
+
+# Attach cluster info to the data
+cereal_df_clean$cluster_id <- cluster_labels
+
+# View cluster sizes
+table(cereal_df_clean$cluster_id)
+
+# Split data into training (70%) and testing (30%)
+set.seed(101)
+n_rows <- nrow(cereal_scaled)
+train_idx <- sample(1:n_rows, size = 0.7 * n_rows)
+
+data_train <- cereal_scaled[train_idx, ]
+data_test <- cereal_scaled[-train_idx, ]
+
+# Cluster partition A (training)
+agnes_train <- agnes(data_train, method = "ward")
+train_clusters <- cutree(agnes_train, k = 4)
+
+# Calculate centroids of training clusters
+train_centroids <- aggregate(data_train, by = list(cluster = train_clusters), FUN = mean)
+
+# Function to assign test observations to nearest centroid
+assign_to_cluster <- function(obs, centroids) {
+  distances <- apply(centroids[, -1], 1, function(center) sum((obs - center)^2))
+  return(which.min(distances))
+}
+
+# Assign test observations to nearest cluster
+test_assignments <- apply(data_test, 1, assign_to_cluster, centroids = train_centroids)
+
+# Cluster full data to compare assignments
+agnes_full <- agnes(cereal_scaled, method = "ward")
+full_clusters <- cutree(agnes_full, k = 4)
+true_test_clusters <- full_clusters[-train_idx]
+
+# Compare predicted vs. actual cluster labels in test set
+# This comparison checks how consistent cluster assignments from training are with the full dataset.
+# The table shows the overlap between predicted clusters (from training centroids) and actual clusters (from full data).
+table(Predicted = test_assignments, Actual = true_test_clusters)
+
+# Summarize clusters to inspect their nutritional profile
+cluster_summary <- cereal_df_clean %>%
+  group_by(cluster_id) %>%
+  summarise(
+    avg_calories = mean(calories),
+    avg_protein = mean(protein),
+    avg_fat = mean(fat),
+    avg_sugars = mean(sugars),
+    avg_fiber = mean(fiber)
+  )
+
+print(cluster_summary)
+
+# The healthiest cereals would have high fiber and protein and low sugar and fat.
+# By inspecting the summary, I can identify the cluster that best fits these criteria.
+# This cluster would be recommended for elementary schools offering healthy breakfast options.
+
+```

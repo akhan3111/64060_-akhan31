@@ -1,0 +1,96 @@
+---
+title: "Final Exam"
+output:
+  word_document: default
+  html_document: default
+date: "2025-07-01"
+---
+
+```{r }
+# Load required packages
+if (!require("cluster")) install.packages("cluster", dependencies = TRUE)
+if (!require("factoextra")) install.packages("factoextra", dependencies = TRUE)
+if (!require("readr")) install.packages("readr", dependencies = TRUE)
+if (!require("dplyr")) install.packages("dplyr", dependencies = TRUE)
+
+library(cluster)
+library(factoextra)
+library(readr)
+library(dplyr)
+
+# Load the CSV
+fuel_df <- read_csv("C:/Users/arkha/Downloads/core_eia923__monthly_fuel_receipts_costs.csv")
+
+# Drop mostly empty or irrelevant columns based on the sample
+fuel_df_cleaned <- fuel_df %>%
+  select(
+    -mercury_content_ppm,
+    -secondary_transportation_mode_code,
+    -natural_gas_transport_code,
+    -natural_gas_delivery_contract_type_code,
+    -moisture_content_pct,
+    -chlorine_content_ppm
+  )
+
+# Convert date and character fields
+fuel_df_cleaned <- fuel_df_cleaned %>%
+  mutate(
+    report_date = as.Date(report_date),
+    contract_expiration_date = as.Date(contract_expiration_date)
+  ) %>%
+  mutate(across(where(is.character), as.factor))
+
+# Sample 2% of the data for performance
+set.seed(1234)
+fuel_sample <- fuel_df_cleaned %>% sample_frac(0.02)
+
+# Split into training and testing sets (75% training)
+train_indices <- sample(seq_len(nrow(fuel_sample)), size = floor(0.75 * nrow(fuel_sample)))
+train_data <- fuel_sample[train_indices, ]
+test_data <- fuel_sample[-train_indices, ]
+
+# Extract numeric columns, remove rows with NA
+train_numeric <- train_data %>%
+  select(where(is.numeric)) %>%
+  na.omit()
+
+# Scale numeric data
+train_scaled <- scale(train_numeric)
+
+# --- Choose Optimal k ---
+# Elbow method
+fviz_nbclust(train_scaled, kmeans, method = "wss") +
+  labs(title = "Elbow Method: Choose the Best Number of Clusters")
+
+# Silhouette method
+fviz_nbclust(train_scaled, kmeans, method = "silhouette") +
+  labs(title = "Silhouette Method: Choose the Best Number of Clusters")
+
+# --- Fit K-means clustering ---
+set.seed(1234)
+k <- 8  # Update this based on previous plot results
+kmeans_result <- kmeans(train_scaled, centers = k, nstart = 25)
+
+# Assign cluster labels back to data
+train_clustered <- train_data %>%
+  filter(complete.cases(select(., where(is.numeric)))) %>%
+  mutate(cluster = as.factor(kmeans_result$cluster))
+
+# Cluster summary
+cluster_summary <- train_clustered %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), list(mean = mean, sd = sd), .names = "{col}_{fn}"))
+
+print(cluster_summary)
+
+# --- Cluster plot (cleaned) ---
+fviz_cluster(kmeans_result, data = train_scaled,
+             ellipse.type = "convex",
+             show.clust.cent = TRUE,
+             geom = "point",
+             pointsize = 1.5,
+             alpha = 0.5,
+             repel = TRUE,
+             labelsize = 0,
+             ggtheme = theme_minimal())
+```
